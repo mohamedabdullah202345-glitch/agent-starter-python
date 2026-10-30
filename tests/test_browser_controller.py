@@ -2,6 +2,7 @@ import threading
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -12,8 +13,14 @@ FIXTURES = Path(__file__).parent / "fixtures" / "site"
 
 
 class _QuietHandler(SimpleHTTPRequestHandler):
+    paths: ClassVar[list[str]] = []
+
     def log_message(self, *args: object) -> None:
         return
+
+    def do_GET(self) -> None:
+        type(self).paths.append(self.path)
+        super().do_GET()
 
 
 @pytest.fixture(scope="session")
@@ -136,3 +143,29 @@ async def test_unknown_ref_is_rejected(browser, site_url) -> None:
     await browser.navigate(f"{site_url}/index.html")
     with pytest.raises(BrowserError):
         await browser.click("e99")
+
+
+def test_page_audio_and_autoplay_are_disabled() -> None:
+    args = BrowserController()._launch_args()
+
+    assert "--mute-audio" in args
+    assert "--autoplay-policy=user-gesture-required" in args
+
+
+def test_media_is_blocked_by_default() -> None:
+    assert BrowserSettings().block_media is True
+
+
+async def test_images_are_not_downloaded(browser, site_url) -> None:
+    _QuietHandler.paths.clear()
+
+    view = await browser.navigate(f"{site_url}/media.html")
+
+    assert "Continue" in {ref.name for ref in view.refs}
+    assert "/pixel.png" not in _QuietHandler.paths
+
+
+async def test_page_that_paints_late_is_inspected_again(browser, site_url) -> None:
+    view = await browser.navigate(f"{site_url}/late.html")
+
+    assert "Reveal later" in {ref.name for ref in view.refs}

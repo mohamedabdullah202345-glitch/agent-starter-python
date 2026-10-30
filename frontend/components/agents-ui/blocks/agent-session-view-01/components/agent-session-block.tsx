@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { RpcInvocationData } from 'livekit-client';
 import { AnimatePresence, type MotionProps, motion } from 'motion/react';
 import { useAgent, useSessionContext, useSessionMessages } from '@livekit/components-react';
+import { useRoomContext } from '@livekit/components-react';
 import { AgentChatTranscript } from '@/components/agents-ui/agent-chat-transcript';
 import {
   AgentControlBar,
@@ -183,7 +185,34 @@ export function AgentSessionView_01({
   const [isChatOpen, setIsChatOpen] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { state: agentState } = useAgent();
+  const room = useRoomContext();
 
+  useEffect(() => {
+    if (!room) return;
+
+    const handleDeviceCommand = async (data: RpcInvocationData) => {
+      try {
+        const cmd = JSON.parse(data.payload);
+        console.log('Received device command:', cmd);
+        if (cmd.action === 'open_link' || cmd.action === 'send_link') {
+          window.open(cmd.target, '_blank');
+        }
+        return JSON.stringify({
+          status: 'ok',
+          message: `Received command: ${cmd.action} on ${cmd.device}`,
+        });
+      } catch (err) {
+        console.error(err);
+        return JSON.stringify({ status: 'error', message: String(err) });
+      }
+    };
+
+    room.localParticipant.registerRpcMethod('deviceCommand', handleDeviceCommand);
+
+    return () => {
+      room.localParticipant.unregisterRpcMethod?.('deviceCommand');
+    };
+  }, [room]);
   const controls: AgentControlBarControls = {
     leave: true,
     microphone: true,

@@ -32,6 +32,17 @@ def test_parse_assigns_refs_and_deduplicates() -> None:
     assert not result.truncated
 
 
+def test_parse_handles_escaped_quotes_in_names() -> None:
+    snapshot = r"""
+- button "He said \"hello\""
+- link "Back\\slash"
+"""
+
+    result = parse_snapshot(snapshot, page_url="https://example.com")
+
+    assert [ref.name for ref in result.refs] == ['He said "hello"', "Back\\slash"]
+
+
 def test_parse_respects_limit() -> None:
     result = parse_snapshot(SNAPSHOT, page_url="https://example.com", limit=2)
     assert len(result.refs) == 2

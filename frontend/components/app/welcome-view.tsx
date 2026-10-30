@@ -1,3 +1,6 @@
+import { useEffect } from 'react';
+import { RpcInvocationData } from 'livekit-client';
+import { useRoomContext } from '@livekit/components-react';
 import { Button } from '@/components/ui/button';
 
 function WelcomeImage() {
@@ -33,14 +36,18 @@ export const WelcomeView = ({
       <section className="bg-background flex flex-col items-center justify-center text-center">
         <WelcomeImage />
 
-        <p className="text-foreground max-w-prose pt-1 leading-6 font-medium">
-          Chat live with your voice AI agent
+        <h1 className="text-foreground text-2xl font-semibold tracking-tight">Jarvis</h1>
+
+        <p className="text-muted-foreground max-w-prose pt-2 leading-6">
+          Your polite, slightly sarcastic butler.
+          <br />
+          Speak naturally — I’ll handle the rest.
         </p>
 
         <Button
           size="lg"
           onClick={onStartCall}
-          className="mt-6 w-64 rounded-full font-mono text-xs font-bold tracking-wider uppercase"
+          className="mt-8 w-64 rounded-full font-mono text-xs font-bold tracking-wider uppercase"
         >
           {startButtonText}
         </Button>
@@ -48,16 +55,7 @@ export const WelcomeView = ({
 
       <div className="fixed bottom-5 left-0 flex w-full items-center justify-center">
         <p className="text-muted-foreground max-w-prose pt-1 text-xs leading-5 font-normal text-pretty md:text-sm">
-          Need help getting set up? Check out the{' '}
-          <a
-            target="_blank"
-            rel="noopener noreferrer"
-            href="https://docs.livekit.io/agents/start/voice-ai/"
-            className="underline"
-          >
-            Voice AI quickstart
-          </a>
-          .
+          Stage 1 ready · Voice, search &amp; browser control
         </p>
       </div>
     </div>

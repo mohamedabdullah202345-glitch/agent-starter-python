@@ -49,8 +49,7 @@ async def open_url(ctx: RunContext[BrowserUserData], url: str) -> str:
             like "example.com" is upgraded to https.
     """
     try:
-        async with ctx.with_filler("One moment, sir.", delay=3):
-            view = await ctx.userdata.browser.navigate(url)
+        view = await ctx.userdata.browser.navigate(url)
     except (BrowserError, BrowserPolicyError) as exc:
         raise _tool_error(exc) from exc
 

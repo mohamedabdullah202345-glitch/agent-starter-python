@@ -29,14 +29,27 @@ _INTERACTIVE_ROLES = frozenset(
     }
 )
 
-_LINE = re.compile(
-    r"^(?P<indent>\s*)-\s+(?P<role>[A-Za-z]+)"
-    r'(?:\s+"(?P<name>(?:[^"\\]|\\.)*)")?'
-    r"(?P<rest>.*)$"
-)
-_URL = re.compile(r"^\s*-\s*/url:\s*(?P<url>\S+)\s*$")
-_VALUE = re.compile(r"^\s*-\s*/value:\s*(?P<value>.*)$")
 _ATTR = re.compile(r"\[([^\]]*)\]")
+
+
+def _split_name(rest: str) -> tuple[str, str] | None:
+    """Return (name, remainder) when ``rest`` starts with a quoted ARIA name."""
+    if not rest.startswith('"'):
+        return None
+    chars: list[str] = []
+    index = 1
+    while index < len(rest):
+        char = rest[index]
+        if char == "\\" and index + 1 < len(rest):
+            chars.append(rest[index + 1])
+            index += 2
+            continue
+        if char == '"':
+            return "".join(chars), rest[index + 1 :]
+        chars.append(char)
+        index += 1
+    return None
+
 
 TEXT_EXTRACTION_SCRIPT = """
 () => {
@@ -77,50 +90,49 @@ class SnapshotResult:
     truncated: bool = False
 
 
-def _unescape(value: str) -> str:
-    return value.replace('\\"', '"').replace("\\\\", "\\")
-
-
 def parse_snapshot(
     snapshot: str,
     *,
     page_url: str,
     limit: int = 60,
 ) -> SnapshotResult:
-    """Parse an ARIA snapshot and assign ``e1..eN`` refs to interactive nodes."""
+    """Parse an ARIA snapshot and assign ``e1..eN`` refs to interactive nodes.
+
+    Hand-parsed rather than regex-per-line: real snapshots run to tens of
+    thousands of lines, and that was costing seconds on every page open.
+    """
     result = SnapshotResult()
     counts: dict[tuple[str, str], int] = {}
     entries: list[dict[str, object]] = []
 
     for line in snapshot.splitlines():
-        url_match = _URL.match(line)
-        if url_match:
+        stripped = line.lstrip()
+        if not stripped.startswith("- "):
+            continue
+        body = stripped[2:]
+
+        if body.startswith("/url:"):
             if entries:
-                entries[-1]["href"] = url_match.group("url")
+                entries[-1]["href"] = body[5:].strip()
             continue
-
-        value_match = _VALUE.match(line)
-        if value_match:
+        if body.startswith("/value:"):
             if entries:
-                entries[-1]["value"] = value_match.group("value").strip()
+                entries[-1]["value"] = body[8:].strip()
             continue
 
-        match = _LINE.match(line)
-        if not match:
-            continue
-
-        role = match.group("role").lower()
+        split_at = body.find(" ")
+        role = (body if split_at < 0 else body[:split_at]).lower()
         if role not in _INTERACTIVE_ROLES:
             continue
 
-        raw_name = match.group("name")
-        if raw_name is None:
+        parsed_name = _split_name(body[len(role) :].lstrip())
+        if parsed_name is None:
             continue
-        name = _unescape(raw_name).strip()
+        name, rest = parsed_name
+        name = name.strip()
         if not name:
             continue
 
-        rest = match.group("rest") or ""
         head = rest.split(":", 1)[0]
         attrs = " ".join(_ATTR.findall(head)).lower()
         if len(entries) >= limit:

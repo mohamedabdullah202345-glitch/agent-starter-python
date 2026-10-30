@@ -1,0 +1,3 @@
+# The app and its tooling (Prettier, ESLint) expect LF. Keep checkouts
+# consistent on Windows so `pnpm build` does not fail on line endings.
+* text=auto eol=lf

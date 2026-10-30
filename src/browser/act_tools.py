@@ -46,8 +46,7 @@ async def click(ctx: RunContext[BrowserUserData], element: str) -> str:
             return _confirmation(token, pending)
 
         ctx.disallow_interruptions()
-        async with ctx.with_filler("One moment, sir.", delay=3):
-            return await browser.click(element)
+        return await browser.click(element)
     except (BrowserError, BrowserPolicyError) as exc:
         raise _tool_error(exc) from exc
 

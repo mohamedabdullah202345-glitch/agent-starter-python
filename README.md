@@ -131,7 +131,8 @@ This project includes the React starter in [`frontend/`](frontend/), already con
 
 ```console
 cd frontend
-corepack pnpm install   # already installed
+corepack enable pnpm     # once, if `pnpm` is not on your PATH
+corepack pnpm install    # already installed
 corepack pnpm dev
 ```
 
@@ -154,7 +155,7 @@ Useful environment variables (all optional, defaults shown in [`.env.example`](.
 - `BROWSER_HEADLESS` — `1` by default; set `0` to watch the browser locally.
 - `BROWSER_ALLOWLIST` — comma-separated domains. Empty means the whole public web.
 - `BROWSER_ALLOW_PRIVATE` — leave off; it exists for the local fixture tests.
-- `BROWSER_BLOCK_MEDIA` — drop images, fonts, and media for faster loads.
+- `BROWSER_BLOCK_MEDIA` — drop images, fonts, and media. On by default: page video would otherwise compete with Jarvis's audio and can stall a call. Chromium also launches muted with autoplay blocked.
 - `BROWSER_NAV_TIMEOUT_MS`, `BROWSER_ACTION_TIMEOUT_MS` — timeouts.
 - `BROWSER_NO_SANDBOX` — set to `1` where Chromium's sandbox is unavailable. The Dockerfile already does this.
 

@@ -59,6 +59,8 @@ export function ViewController({ isVideoInputSupported }: ViewControllerProps) {
           supportsVideoInput={isVideoInputSupported}
           supportsScreenShare={isVideoInputSupported}
           isPreConnectBufferEnabled={true}
+          audioVisualizerType="grid"
+          audioVisualizerColor="#FF6A00"
           themeMode={resolvedTheme === 'dark' ? 'dark' : 'light'}
           className="fixed inset-0"
         />

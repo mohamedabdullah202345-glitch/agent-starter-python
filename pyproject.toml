@@ -10,7 +10,7 @@ requires-python = ">=3.10, <3.15"
 
 dependencies = [
     "ddgs>=9.16.1",
-    "livekit-agents[google]~=1.8",
+    "livekit-agents[google,images]~=1.8",
     "livekit-plugins-ai-coustics~=0.3",
     "playwright>=1.64.1",
     "python-dotenv",

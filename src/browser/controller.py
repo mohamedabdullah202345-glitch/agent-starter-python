@@ -79,7 +79,7 @@ class BrowserSettings:
     nav_timeout_ms: int = 20_000
     action_timeout_ms: int = 5_000
     settle_timeout_ms: int = 2_500
-    block_media: bool = False
+    block_media: bool = True
     locale: str = "en-GB"
     timezone_id: str = "Europe/London"
     viewport_width: int = 1280
@@ -102,7 +102,7 @@ class BrowserSettings:
             max_elements=_env_int("BROWSER_MAX_ELEMENTS", 60),
             nav_timeout_ms=_env_int("BROWSER_NAV_TIMEOUT_MS", 20_000),
             action_timeout_ms=_env_int("BROWSER_ACTION_TIMEOUT_MS", 5_000),
-            block_media=_env_bool("BROWSER_BLOCK_MEDIA", False),
+            block_media=_env_bool("BROWSER_BLOCK_MEDIA", True),
             no_sandbox=_env_bool("BROWSER_NO_SANDBOX", False),
         )
 
@@ -170,6 +170,16 @@ _SCROLL_PROGRESS_SCRIPT = """
 }
 """
 
+_HAS_TEXT_SCRIPT = """
+() => {
+  const root =
+    document.querySelector('main, article, [role="main"]') || document.body;
+  if (!root) return false;
+  const text = root.innerText || '';
+  return text.trim().length > 20;
+}
+"""
+
 
 def _friendly_error(exc: PlaywrightError) -> str:
     text = str(exc)
@@ -227,7 +237,18 @@ class BrowserController:
         return self._page
 
     def _launch_args(self) -> list[str]:
-        args = ["--disable-dev-shm-usage"]
+        args = [
+            "--disable-dev-shm-usage",
+            # A page must never play sound or open an audio device: on Windows
+            # an autoplaying video competes with the agent's own audio path
+            # (and the noise canceller) and can stall the event loop for a
+            # minute, leaving the caller in silence.
+            "--mute-audio",
+            "--autoplay-policy=user-gesture-required",
+            # Keep a page from spawning a renderer per ad frame.
+            "--renderer-process-limit=2",
+            "--disable-gpu",
+        ]
         if self.settings.no_sandbox:
             args.append("--no-sandbox")
         return args
@@ -338,7 +359,21 @@ class BrowserController:
             raise BrowserError(_friendly_error(exc)) from exc
 
         await self._settle(page)
+        await self._assert_page_allowed(page)
 
+        view = await self._view_locked(page, include_text=True, text_limit=320)
+        if not view.refs and not view.text:
+            # Single-page apps and bot walls often paint after domcontentloaded
+            # and would otherwise look completely empty to the model. Keep the
+            # second look short: an empty page is usually empty for good.
+            await asyncio.sleep(0.5)
+            await self._settle(page, timeout_ms=1_000)
+            await self._assert_page_allowed(page)
+            view = await self._view_locked(page, include_text=True, text_limit=320)
+        return view
+
+    async def _assert_page_allowed(self, page: Page) -> None:
+        """Re-check the URL after navigation, since a redirect could escape policy."""
         try:
             await assert_url_allowed(
                 page.url,
@@ -349,8 +384,6 @@ class BrowserController:
             with contextlib.suppress(PlaywrightError):
                 await page.goto("about:blank")
             raise
-
-        return await self._view_locked(page, include_text=True, text_limit=320)
 
     async def inspect(self) -> PageView:
         async with self._lock:
@@ -595,11 +628,20 @@ class BrowserController:
         include_text: bool,
         text_limit: int = 320,
     ) -> PageView:
-        title = await self._safe_title(page)
+        # Both are one round trip each and independent, so overlap them.
+        snapshot_task = asyncio.ensure_future(self._safe_snapshot(page))
+        text_task = (
+            asyncio.ensure_future(self._extract_text(page)) if include_text else None
+        )
         try:
-            snapshot = await page.locator("body").aria_snapshot()
-        except PlaywrightError:
-            snapshot = ""
+            title, snapshot = await asyncio.gather(
+                self._safe_title(page), snapshot_task
+            )
+            text = await text_task if text_task is not None else ""
+        finally:
+            for task in (snapshot_task, text_task):
+                if task is not None and not task.done():
+                    task.cancel()
 
         parsed = parse_snapshot(
             snapshot,
@@ -609,17 +651,19 @@ class BrowserController:
         self._refs = {entry.ref: entry for entry in parsed.refs}
         self._refs_url = page.url
 
-        text = ""
-        if include_text:
-            text = lead_text(await self._extract_text(page), limit=text_limit)
-
         return PageView(
             title=title,
             url=page.url,
             refs=parsed.refs,
             truncated=parsed.truncated,
-            text=text,
+            text=lead_text(text, limit=text_limit) if include_text else "",
         )
+
+    async def _safe_snapshot(self, page: Page) -> str:
+        try:
+            return await page.locator("body").aria_snapshot()
+        except PlaywrightError:
+            return ""
 
     async def _safe_title(self, page: Page) -> str:
         with contextlib.suppress(PlaywrightError):
@@ -635,10 +679,14 @@ class BrowserController:
             return ""
         return normalize_text(str(text or ""))
 
-    async def _settle(self, page: Page) -> None:
+    async def _settle(self, page: Page, timeout_ms: int | None = None) -> None:
+        # networkidle never arrives on most real sites (ads, websockets, polling),
+        # so waiting on it burned the whole timeout and added seconds to every
+        # page open. Wait for readable content instead, with the same cap.
         with contextlib.suppress(PlaywrightTimeoutError):
-            await page.wait_for_load_state(
-                "networkidle", timeout=self.settings.settle_timeout_ms
+            await page.wait_for_function(
+                _HAS_TEXT_SCRIPT,
+                timeout=timeout_ms or self.settings.settle_timeout_ms,
             )
 
     def _require_ref(self, page: Page, element: str) -> ElementRef:
