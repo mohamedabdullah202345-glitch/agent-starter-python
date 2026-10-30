@@ -127,6 +127,50 @@ Pair the agent with a prebuilt frontend starter, or add telephony:
 
 For more options, see the [frontend guide](https://docs.livekit.io/frontends/).
 
+This project includes the React starter in [`frontend/`](frontend/), already connected to this agent. The Python agent registers as `my-agent`, and `frontend/.env.local` sets `AGENT_NAME=my-agent` so the app dispatches to it.
+
+```console
+cd frontend
+corepack pnpm install   # already installed
+corepack pnpm dev
+```
+
+Then open http://localhost:3000 and start the agent in another terminal with `uv run src/agent.py dev`. `frontend/.env.local` holds local credentials copied from this project's `.env.local`; nothing there is committed.
+
+## Browser control
+
+Jarvis can drive a real Chromium browser through Playwright. The tools live in [`src/browser/`](src/browser/) and split into read/navigation tools (`open_url`, `inspect_page`, `read_page`, `go_back`) and acting tools (`click`, `type_text`, `press_key`, `scroll`, `confirm_browser_action`).
+
+Install the browser once per machine:
+
+```console
+uv run playwright install chromium
+```
+
+The Dockerfile installs Chromium and its system libraries for deployments. That adds roughly 400 MB to the image.
+
+Useful environment variables (all optional, defaults shown in [`.env.example`](.env.example)):
+
+- `BROWSER_HEADLESS` — `1` by default; set `0` to watch the browser locally.
+- `BROWSER_ALLOWLIST` — comma-separated domains. Empty means the whole public web.
+- `BROWSER_ALLOW_PRIVATE` — leave off; it exists for the local fixture tests.
+- `BROWSER_BLOCK_MEDIA` — drop images, fonts, and media for faster loads.
+- `BROWSER_NAV_TIMEOUT_MS`, `BROWSER_ACTION_TIMEOUT_MS` — timeouts.
+- `BROWSER_NO_SANDBOX` — set to `1` where Chromium's sandbox is unavailable. The Dockerfile already does this.
+
+Run the browser tests (they launch a real headless Chromium against a local fixture site):
+
+```console
+uv run pytest tests/test_browser_controller.py
+```
+
+Safety is enforced in code, not just in the prompt:
+
+- Only `http`/`https` pages load. `file:`, `data:`, `javascript:`, localhost, private IP ranges, and cloud metadata addresses are rejected, including after redirects.
+- Clicks on controls named like buy, pay, send, delete, submit, book, and similar are held. The tool returns `CONFIRMATION_REQUIRED` with a single-use token, and nothing happens until `confirm_browser_action` runs after the user says yes.
+- Page text is wrapped in `<<UNTRUSTED_PAGE_CONTENT>>` markers. It is data, not instructions, which limits but does not eliminate prompt injection.
+- Downloads are disabled, dialogs are dismissed, and there is no JavaScript-eval tool.
+
 ## Testing and debugging
 
 Simulations run full multi-turn conversations between a simulated user and your agent on LiveKit Cloud, then judge each transcript. The scenarios live in [`scenarios.yaml`](scenarios.yaml). Run them locally with the CLI:

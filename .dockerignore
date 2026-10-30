@@ -4,6 +4,10 @@ tests/
 eval/
 evals/
 
+# React frontend (deployed separately, not part of the agent image)
+frontend/
+node_modules/
+
 # Python bytecode and artifacts
 __pycache__/
 *.py[cod]

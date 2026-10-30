@@ -80,6 +80,18 @@ COPY --from=build --chown=appuser:appuser /app /app
 
 WORKDIR /app
 
+# Chromium for Playwright. Kept outside the venv so the browser survives
+# `uv sync` and is shared by every worker process. This adds roughly 400 MB to
+# the image; remove the browser tools if that is unacceptable.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN uv run playwright install --with-deps chromium \
+  && chown -R appuser:appuser /ms-playwright
+
+# Chromium's sandbox needs unprivileged user namespaces, which most container
+# runtimes block (the browser fails to start with "No usable sandbox"). Disable
+# it here only; local runs keep the sandbox.
+ENV BROWSER_NO_SANDBOX=1
+
 # Switch to the non-privileged user for all subsequent operations
 # This improves security by not running as root
 USER appuser
