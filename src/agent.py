@@ -180,6 +180,11 @@ async def my_agent(ctx: JobContext):
 
     await ctx.connect()
 
+    # Speak first: greet the user before they say anything
+    await session.generate_reply(
+        instructions="Enthusiastically greet the user and offer to help."
+    )
+
 
 if __name__ == "__main__":
     cli.run_app(server)
